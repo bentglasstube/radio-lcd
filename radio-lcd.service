@@ -1,0 +1,10 @@
+[Unit]
+Description=Radio LCD Driver
+After=mpd.service
+
+[Service]
+Type=simple
+ExecStart=/home/radio/radio-lcd/driver
+
+[Install[
+WantedBy=multi-user.target
