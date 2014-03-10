@@ -6,5 +6,5 @@ After=mpd.service
 Type=simple
 ExecStart=/home/radio/radio-lcd/driver
 
-[Install[
+[Install]
 WantedBy=multi-user.target
