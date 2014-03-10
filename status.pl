@@ -5,23 +5,63 @@ use strict;
 use warnings;
 
 use LCD;
+use Net::MPD;
 use Time::HiRes 'sleep';
 
 my $lcd = LCD->new('/dev/ttyACM0');
+my $mpd;
 
 $lcd->clear();
 $lcd->contrast(200);
 $lcd->brightness(100);
 $lcd->color(255, 255, 255);
 
-$lcd->say(chr(0), chr(1), ' eatabrick');
-$lcd->say(chr(2), chr(3), ' radio');
-
 $SIG{INT} = sub {
   $lcd->clear();
+  $lcd->contrast(200);
+  $lcd->brightness(0);
   exit;
 };
 
-while (1) {
-  sleep 3;
+sub error {
+  my ($message, $retry) = @_;
+
+  $retry //= 10;
+
+  $lcd->color(255, 0, 0);
+  $lcd->clear();
+  $lcd->say($message);
+
+  for (reverse 1 .. $retry) {
+    $lcd->set_cursor(1, 2);
+    $lcd->print("Retry in $_ ");
+    sleep 1;
+  }
 }
+
+sub line {
+  my ($string) = @_;
+  $lcd->print(substr("$string\n", 0, 16));
+}
+
+sub show_current {
+  my $song = $mpd->current_song;
+
+  $lcd->color(255, 255, 255);
+  $lcd->clear();
+  line($song->{Album} || 'Unknown');
+  line($song->{Title} || 'Untitled');
+}
+
+while (1) {
+  $mpd = eval { Net::MPD->connect() };
+  last if $mpd;
+  error('Connection error');
+}
+
+while (1) {
+  show_current($mpd->current_song);
+  $mpd->idle(qw'playlist player');
+}
+
+
