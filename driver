@@ -26,16 +26,16 @@ $SIG{INT} = sub {
 sub error {
   my ($message, $retry) = @_;
 
-  $retry //= 10;
-
   $lcd->color(255, 0, 0);
   $lcd->clear();
   $lcd->say($message);
 
-  for (reverse 1 .. $retry) {
-    $lcd->set_cursor(1, 2);
-    $lcd->print("Retry in $_ ");
-    sleep 1;
+  if ($retry) {
+    for (reverse 1 .. $retry) {
+      $lcd->set_cursor(1, 2);
+      $lcd->print("Retry in $_ ");
+      sleep 1;
+    }
   }
 }
 
@@ -45,18 +45,22 @@ sub line {
 }
 
 sub show_current {
-  my $song = $mpd->current_song;
-
-  $lcd->color(255, 255, 255);
-  $lcd->clear();
-  line($song->{Album} || 'Unknown');
-  line($song->{Title} || 'Untitled');
+  $mpd->update_status;
+  if ($mpd->state eq 'play') {
+    my $song = $mpd->current_song;
+    $lcd->color(255, 255, 255);
+    $lcd->clear();
+    line($song->{Album} || 'Unknown');
+    line($song->{Title} || 'Untitled');
+  } else {
+    error('Not playing');
+  }
 }
 
 while (1) {
   $mpd = eval { Net::MPD->connect() };
   last if $mpd;
-  error('Connection error');
+  error('Connection error', 10);
 }
 
 while (1) {
