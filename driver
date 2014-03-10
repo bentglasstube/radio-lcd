@@ -8,8 +8,7 @@ use LCD;
 use Net::MPD;
 use Time::HiRes 'sleep';
 
-my $lcd = LCD->new('/dev/ttyACM0');
-my $mpd;
+my $lcd = LCD->new('/dev/lcd');
 
 $lcd->clear();
 $lcd->contrast(200);
@@ -23,12 +22,17 @@ $SIG{INT} = sub {
   exit;
 };
 
+sub line {
+  my ($string) = @_;
+  $lcd->print(substr("$string\n", 0, 16));
+}
+
 sub error {
   my ($message, $retry) = @_;
 
   $lcd->color(255, 0, 0);
   $lcd->clear();
-  $lcd->say($message);
+  line($message);
 
   if ($retry) {
     for (reverse 1 .. $retry) {
@@ -39,12 +43,9 @@ sub error {
   }
 }
 
-sub line {
-  my ($string) = @_;
-  $lcd->print(substr("$string\n", 0, 16));
-}
-
 sub show_current {
+  my ($mpd) = @_;
+
   $mpd->update_status;
   if ($mpd->state eq 'play') {
     my $song = $mpd->current_song;
@@ -57,15 +58,18 @@ sub show_current {
   }
 }
 
-while (1) {
-  $mpd = eval { Net::MPD->connect() };
-  last if $mpd;
-  error('Connection error', 10);
-}
+$lcd->set_splash('eatabrick radio                 ');
 
 while (1) {
-  show_current($mpd->current_song);
-  $mpd->idle(qw'playlist player');
+  eval {
+    my $mpd = Net::MPD->connect();
+    while (1) {
+      show_current($mpd);
+      $mpd->idle(qw'playlist player');
+    }
+  };
+
+  error($@, 10);
 }
 
 
