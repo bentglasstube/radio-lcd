@@ -10,6 +10,7 @@ sub new {
 
   my $fh = IO::File->new($path, 'w') or die "Could not open $path: $!";
   $fh->autoflush(1);
+  $fh->binmode(':raw');
 
   return bless { fh => $fh }, $class;
 }

@@ -4,72 +4,134 @@ use 5.010;
 use strict;
 use warnings;
 
-use LCD;
+our $VERSION = '0.1';
+
+use threads;
+use lib 'lib';
+
 use Net::MPD;
-use Time::HiRes 'sleep';
+#use Net::Ping;
+#use Net::UPnP::ControlPoint;
+#use Net::UPnP::GW::Gateway;
 
-my $lcd = LCD->new('/dev/lcd');
+use LCDManager;
 
-$lcd->clear();
-$lcd->contrast(200);
-$lcd->brightness(100);
-$lcd->color(255, 255, 255);
+my $lcd = LCDManager->new('/dev/lcd');
+$lcd->run();
 
-local $SIG{TERM} = sub {
-  $lcd->clear();
-  $lcd->contrast(200);
-  $lcd->brightness(0);
+local $SIG{INT} = sub {
+  $lcd->exit;
   exit;
 };
 
-sub line {
-  my ($string) = @_;
-  $lcd->print(substr("$string\n", 0, 16));
+sub borked {
+  my ($message) = @_;
+
+  $lcd->set_color('red');
+  $lcd->set_status('Error');
+  $lcd->set_line($message);
+
+  undef while 1; # wait forever
 }
 
-sub error {
-  my ($message, $retry) = @_;
+local $SIG{__DIE__} = sub { borked @_ };
 
-  $lcd->color(255, 0, 0);
-  $lcd->clear();
-  line($message);
+sub intro {
+  $lcd->set_status('eatabrick radio');
+  $lcd->set_line(sprintf('version %-5s', $VERSION));
 
-  if ($retry) {
-    for (reverse 1 .. $retry) {
-      $lcd->set_cursor(1, 2);
-      $lcd->print("Retry in $_ ");
-      sleep 1;
-    }
+  sleep 5;
+}
+
+sub wait_network {
+  $lcd->set_color('blue');
+  $lcd->set_status('Connecting');
+  $lcd->set_line('Trying to connect to internet');
+
+  my $p = Net::Ping->new();
+
+  while (1) {
+    return if $p->ping('radio.eatabrick.org');
+    sleep 5;
   }
 }
 
-sub show_current {
-  my ($mpd) = @_;
+sub register_upnp {
+  $lcd->set_color('blue');
+  $lcd->set_status('Registering');
+  $lcd->set_line('Looking for UPnP control point');
 
-  $mpd->update_status;
-  if ($mpd->state eq 'play') {
-    my $song = $mpd->current_song;
-    $lcd->color(255, 255, 255);
-    $lcd->clear();
-    line($song->{Album} || 'Unknown');
-    line($song->{Title} || 'Untitled');
-  } else {
-    error('Not playing');
+  local $SIG{PIPE} = sub { undef };
+
+  my $cp = Net::UPnP::ControlPoint->new();
+  my @devices = $cp->search(st => 'upnp:rootdevice', mx => 3);
+
+  foreach my $device (@devices) {
+    next unless $device->getdevicetype eq 'urn:schemas-upnp-org:device:InternetGatewayDevice:1';
+    next unless $device->getservicebyname('urn:schemas-upnp-org:service:WANIPConnection:1');
+
+    $lcd->set_line('Getting external IP');
+
+    my $gw = Net::UPnP::GW::Gateway->new();
+    $gw->setdevice($device);
+
+    my $ip = $gw->getexternalipaddress;
+    $lcd->set_line("IP: $ip");
+    sleep 3;
+
+    my $port = 50000 + int(rand() * 10000);
+
+    my $result = $gw->addportmapping(
+      NewExternalPort       => $port,
+      NewProtocol => 'TCP',
+      NewInternalPort => 22,
+      NewInternalClient => 'localhost',
+      NewPortMappingDescription => 'eatabrick radio ssh',
+    );
+
+    return if $result;
+  }
+
+  borked 'Could not set up UPnP';
+}
+
+sub mpd_display {
+  $lcd->set_color('blue');
+  $lcd->set_status('Ready');
+  $lcd->set_line('Waiting for station');
+
+  while (1) {
+    eval {
+      my $mpd = Net::MPD->connect();
+
+      while (1) {
+        $mpd->update_status;
+        if ($mpd->state eq 'play') {
+          $lcd->set_color('green');
+          $lcd->set_status('Playing');
+
+          my $song = $mpd->current_song;
+          my $string = '';
+          $string .= "$song->{Album} - " if $song->{Album};
+          $string .= $song->{Title} || 'Untitled';
+          $lcd->set_line($string);
+        } else {
+          $lcd->set_color('grey');
+          $lcd->set_status('Stopped');
+          $lcd->set_line('');
+        }
+
+        $mpd->idle(qw'player playlist');
+      }
+    };
+
+    $lcd->set_color('blue');
+    $lcd->set_status('Ready');
+    $lcd->set_line('Waiting for station');
   }
 }
 
-$lcd->set_splash('eatabrick radio                 ');
-
-while (1) {
-  eval {
-    my $mpd = Net::MPD->connect();
-    while (1) {
-      show_current($mpd);
-      $mpd->idle(qw'playlist player');
-    }
-  };
-
-  error($@, 10);
-}
-
-
+intro;
+#wait_network;
+#register_upnp;
+mpd_display;
