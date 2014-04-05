@@ -4,7 +4,8 @@ After=mpd.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/perl -I /home/radio/radio-lcd /home/radio/radio-lcd/driver
+WorkingDirectory=/usr/local/lib/radio-lcd
+ExecStart=/usr/bin/perl /usr/local/lib/radio-lcd/driver
 
 [Install]
 WantedBy=multi-user.target
