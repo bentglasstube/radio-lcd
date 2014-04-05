@@ -28,8 +28,8 @@ sub borked {
   my ($message) = @_;
 
   $lcd->set_color('red');
-  $lcd->set_status('Error');
-  $lcd->set_line($message);
+  $lcd->set_top('Error');
+  $lcd->set_bottom($message);
 
   undef while 1; # wait forever
 }
@@ -37,16 +37,16 @@ sub borked {
 local $SIG{__DIE__} = sub { borked @_ };
 
 sub intro {
-  $lcd->set_status('eatabrick radio');
-  $lcd->set_line(sprintf('version %-5s', $VERSION));
+  $lcd->set_top('eatabrick radio');
+  $lcd->set_bottom(sprintf('version %-5s', $VERSION));
 
   sleep 5;
 }
 
 sub wait_network {
   $lcd->set_color('blue');
-  $lcd->set_status('Connecting');
-  $lcd->set_line('Trying to connect to internet');
+  $lcd->set_top('Connecting');
+  $lcd->set_bottom('Trying to connect to internet');
 
   my $p = Net::Ping->new();
 
@@ -58,8 +58,8 @@ sub wait_network {
 
 sub register_upnp {
   $lcd->set_color('blue');
-  $lcd->set_status('Registering');
-  $lcd->set_line('Looking for UPnP control point');
+  $lcd->set_top('Registering');
+  $lcd->set_bottom('Looking for UPnP control point');
 
   local $SIG{PIPE} = sub { undef };
 
@@ -70,13 +70,13 @@ sub register_upnp {
     next unless $device->getdevicetype eq 'urn:schemas-upnp-org:device:InternetGatewayDevice:1';
     next unless $device->getservicebyname('urn:schemas-upnp-org:service:WANIPConnection:1');
 
-    $lcd->set_line('Getting external IP');
+    $lcd->set_bottom('Getting external IP');
 
     my $gw = Net::UPnP::GW::Gateway->new();
     $gw->setdevice($device);
 
     my $ip = $gw->getexternalipaddress;
-    $lcd->set_line("IP: $ip");
+    $lcd->set_bottom("IP: $ip");
     sleep 3;
 
     my $port = 50000 + int(rand() * 10000);
@@ -97,8 +97,8 @@ sub register_upnp {
 
 sub mpd_display {
   $lcd->set_color('blue');
-  $lcd->set_status('Ready');
-  $lcd->set_line('Waiting for station');
+  $lcd->set_top('Ready');
+  $lcd->set_bottom('Waiting for station');
 
   while (1) {
     eval {
@@ -108,17 +108,14 @@ sub mpd_display {
         $mpd->update_status;
         if ($mpd->state eq 'play') {
           $lcd->set_color('green');
-          $lcd->set_status('Playing');
 
           my $song = $mpd->current_song;
-          my $string = '';
-          $string .= "$song->{Album} - " if $song->{Album};
-          $string .= $song->{Title} || 'Untitled';
-          $lcd->set_line($string);
+          $lcd->set_top($song->{Album} || 'Unknown Album');
+          $lcd->set_bottom($song->{Title} || 'Untitled');
         } else {
           $lcd->set_color('grey');
-          $lcd->set_status('Stopped');
-          $lcd->set_line('');
+          $lcd->set_top('Stopped');
+          $lcd->set_bottom('');
         }
 
         $mpd->idle(qw'player playlist');
@@ -126,8 +123,8 @@ sub mpd_display {
     };
 
     $lcd->set_color('blue');
-    $lcd->set_status('Ready');
-    $lcd->set_line('Waiting for station');
+    $lcd->set_top('Ready');
+    $lcd->set_bottom('Waiting for station');
   }
 }
 
